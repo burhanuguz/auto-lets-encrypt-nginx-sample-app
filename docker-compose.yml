@@ -1,0 +1,42 @@
+version: '3'
+
+services:
+  init:
+    image: jonasal/nginx-certbot:latest
+    environment:
+      - CERTBOT_DOMAIN=${CERTBOT_DOMAIN:?err}
+    volumes:
+      - ./user_conf.d:/user_conf.d
+      - nginx_conf:/etc/nginx/user_conf.d
+    entrypoint: |
+      /bin/bash -c "envsubst '$${CERTBOT_DOMAIN}' < /user_conf.d/reverse-proxy.conf > /etc/nginx/user_conf.d/reverse-proxy.conf"
+  nginx:
+    image: jonasal/nginx-certbot:latest
+    restart: unless-stopped
+    environment:
+      - CERTBOT_EMAIL=burhan_uguz_is@outlook.com
+    env_file:
+      - ./nginx-certbot.env
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - nginx_secrets:/etc/letsencrypt
+      - nginx_conf:/etc/nginx/user_conf.d
+    depends_on:
+      - init
+    ## Healtcheck reloads nginx every day to serve with new cert if it is renewed
+    healthcheck:
+      test: ["CMD", "nginx", "-s", "reload"]
+      interval: 24h
+      start_period: 40s # Start healthcheck command after 40 sec
+  application:
+    build: ./linux_tweet_app
+    image: application:v1
+    depends_on:
+      - nginx
+    restart: unless-stopped
+
+volumes:
+  nginx_secrets:
+  nginx_conf:
